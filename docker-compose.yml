@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: digital-bank-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-digital_bank}
+      POSTGRES_USER: ${DB_USERNAME:-digital_bank}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-digital_bank}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-digital_bank} -d ${DB_NAME:-digital_bank}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: digital-bank-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: digital-bank-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-digital_bank}
+      DB_USERNAME: ${DB_USERNAME:-digital_bank}
+      DB_PASSWORD: ${DB_PASSWORD:-digital_bank}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      MESSAGING_ENABLED: ${MESSAGING_ENABLED:-true}
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-please-change-me-with-at-least-32-bytes}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_CAPACITY: ${RATE_LIMIT_CAPACITY:-60}
+      RATE_LIMIT_REFILL_TOKENS: ${RATE_LIMIT_REFILL_TOKENS:-60}
+      RATE_LIMIT_REFILL_PERIOD_SECONDS: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:-60}
+      SEED_ENABLED: ${SEED_ENABLED:-true}
+      SEED_DEFAULT_PASSWORD: ${SEED_DEFAULT_PASSWORD:-Password123!}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+
+volumes:
+  postgres_data:
